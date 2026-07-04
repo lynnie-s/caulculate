@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>發票公司加總系統</title>
+<style>
+  :root{
+    --bg:#f7f5f2; --card:#ffffff; --ink:#2b2b2b; --muted:#7a756e;
+    --accent:#a3623b; --accent-soft:#f0dfd2; --line:#e6e1da; --good:#4c7a5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg); color:var(--ink); margin:0; padding:24px;
+  }
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:20px;}
+  .layout{display:grid; grid-template-columns: 1.3fr 1fr; gap:20px; align-items:start;}
+  @media (max-width: 900px){ .layout{grid-template-columns:1fr;} }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .card h2{font-size:15px; margin:0 0 12px; color:var(--accent);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{padding:7px 8px; border-bottom:1px solid var(--line); text-align:right;}
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2){text-align:left;}
+  th{color:var(--muted); font-weight:600; font-size:12px;}
+  tbody tr:hover{background:#faf7f4;}
+  tfoot td{font-weight:700; border-top:2px solid var(--ink); border-bottom:none;}
+  .num{font-variant-numeric: tabular-nums;}
+  .company-count{color:var(--muted); font-size:11px; font-weight:400;}
+  textarea{
+    width:100%; height:110px; font-family: ui-monospace, Menlo, monospace; font-size:12px;
+    border:1px solid var(--line); border-radius:8px; padding:10px; resize:vertical;
+  }
+  .row-inputs{display:grid; grid-template-columns: 1.5fr 1fr 0.8fr 0.8fr 0.8fr auto; gap:6px; margin-top:10px;}
+  .row-inputs input{
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:12px; width:100%;
+  }
+  button{
+    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:8px 14px; font-size:13px; cursor:pointer;
+  }
+  button.secondary{background:var(--accent-soft); color:var(--accent);}
+  button:hover{opacity:0.9;}
+  .actions{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .hint{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.6;}
+  .del{background:none; color:#b23; border:none; cursor:pointer; font-size:12px; padding:2px 6px;}
+  .grand{
+    margin-top:14px; padding-top:10px; border-top:1px dashed var(--line);
+    display:flex; justify-content:space-between; font-size:13px; color:var(--good); font-weight:700;
+  }
+  .badge{font-size:11px; background:var(--accent-soft); color:var(--accent); padding:1px 6px; border-radius:6px;}
+</style>
+</head>
+<body>
+
+<h1>📋 發票公司加總系統</h1>
+<div class="sub">依統一編號自動分組，加總「銷售額 / 稅額 / 總額」。資料只存在這個頁面裡（重新整理會清空），要保留請用「匯出 CSV」。</div>
+
+<div class="layout">
+
+  <div class="card">
+    <h2>公司加總結果 <span class="badge" id="companyCount"></span></h2>
+    <table>
+      <thead>
+        <tr><th>公司</th><th>統編</th><th>銷售額</th><th>稅額</th><th>總額</th></tr>
+      </thead>
+      <tbody id="summaryBody"></tbody>
+      <tfoot>
+        <tr><td colspan="2">總計</td><td class="num" id="sumSales">0</td><td class="num" id="sumTax">0</td><td class="num" id="sumTotal">0</td></tr>
+      </tfoot>
+    </table>
+    <div class="actions">
+      <button id="exportBtn">匯出 CSV</button>
+      <button class="secondary" id="clearBtn">清空全部</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>發票明細（可新增 / 刪除）</h2>
+    <table>
+      <thead>
+        <tr><th>公司</th><th>統編</th><th>銷售額</th><th>稅額</th><th>總額</th><th></th></tr>
+      </thead>
+      <tbody id="detailBody"></tbody>
+    </table>
+
+    <div class="row-inputs">
+      <input id="inCompany" placeholder="公司名稱">
+      <input id="inTaxId" placeholder="統一編號">
+      <input id="inSales" placeholder="銷售額" type="number">
+      <input id="inTax" placeholder="稅額" type="number">
+      <input id="inTotal" placeholder="總額" type="number">
+      <button id="addBtn">新增</button>
+    </div>
+
+    <div class="hint">
+      也可以整批貼上，一行一張發票，欄位用 Tab 或逗號分隔：<br>
+      公司名稱, 統編, 銷售額, 稅額, 總額
+    </div>
+    <textarea id="bulkInput" placeholder="立津國際開發有公司,24223804,28394,1420,29814
+捷揚保全股份公司,16360373,780,39,819"></textarea>
+    <div class="actions">
+      <button id="bulkAddBtn">批次加入</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const initialData = [
+["立津國際開發有公司","24223804",28394,1420,29814],
+["捷揚保全股份公司","16360373",780,39,819],
+["鼎益興業有限公司","24353550",20952,1048,22000],
+["堯隆實業有限公司","83775079",21805,1090,22895],
+["資峰工業有限公司","53059893",5810,290,6100],
+["威逢企業股公司","23410499",43018,2151,45169],
+["艾邁思國際有限公司","24591531",8000,400,8400],
+["康淳科技股份有限","80063414",17452,873,18325],
+["盛錦開發有限公司","53864200",38408,1920,40328],
+["盛錦開發有限公司","53864200",22914,1146,24060],
+["格瑞生醫股份有公","53793640",4762,238,5000],
+["墳閣有限公司","53177420",21011,1051,22062],
+["正璿精密實業股公","97055418",7015,351,7366],
+["沃迪室內設計企業","95333529",4761,238,4999],
+["蜩睦生物科技有限","28322333",6500,325,6825],
+["佐佐木賢室內裝修設","53480529",11714,586,12300],
+["士潔服務有限公司","89646284",7059,353,7412],
+["上浩工程顧問有限公","79971654",50192,2510,52702],
+["致沅貿易股公司","97353681",1200,60,1260],
+["茂荃機電工程股公","97575749",5048,252,5300],
+["野邁企業社","82581933",6190,310,6500],
+["駿湧有限公司","24821528",47619,2381,50000],
+["胖加烘焙食品股公司","83600043",8033,402,8435],
+["盛錦開發有限公司","53864200",5328,266,5594],
+["台灣荏原艾利特機","84308405",8311,416,8727],
+["丞星清潔服務商業有","91049093",6776,339,7115],
+["豪紳吊車起重工程","87102166",12762,638,13400],
+["得奕泰有限公司","27398159",12381,619,13000],
+["禾泰建設股份有限","83425799",2381,119,2500],
+["正璿精密實業股","97055418",2910,146,3056],
+["鼎益興業有限公司","24353550",700,35,735],
+["崑盈工程行","94353821",14952,748,15700],
+["茂荃機電工程股","97575749",2762,138,2900],
+["錦裕國際股份有","28842947",8571,429,9000],
+["林家香食品有限公","24363065",9908,495,10403]
+];
+
+let invoices = initialData.map(r => ({company:r[0], taxId:r[1], sales:r[2], tax:r[3], total:r[4]}));
+
+function fmt(n){ return Number(n||0).toLocaleString('zh-Hant'); }
+
+function render(){
+  // detail table
+  const detailBody = document.getElementById('detailBody');
+  detailBody.innerHTML = '';
+  invoices.forEach((inv, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${inv.company}</td><td>${inv.taxId}</td>
+      <td class="num">${fmt(inv.sales)}</td><td class="num">${fmt(inv.tax)}</td><td class="num">${fmt(inv.total)}</td>
+      <td><button class="del" data-idx="${idx}">✕</button></td>`;
+    detailBody.appendChild(tr);
+  });
+  detailBody.querySelectorAll('.del').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = parseInt(e.target.dataset.idx);
+      invoices.splice(i,1);
+      render();
+    });
+  });
+
+  // group by taxId (fallback company name)
+  const groups = {};
+  invoices.forEach(inv=>{
+    const key = inv.taxId || inv.company;
+    if(!groups[key]) groups[key] = {company: inv.company, taxId: inv.taxId, sales:0, tax:0, total:0};
+    groups[key].sales += Number(inv.sales)||0;
+    groups[key].tax += Number(inv.tax)||0;
+    groups[key].total += Number(inv.total)||0;
+  });
+  const groupList = Object.values(groups).sort((a,b)=> b.total - a.total);
+
+  const summaryBody = document.getElementById('summaryBody');
+  summaryBody.innerHTML = '';
+  let gSales=0, gTax=0, gTotal=0;
+  groupList.forEach(g=>{
+    gSales+=g.sales; gTax+=g.tax; gTotal+=g.total;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${g.company}</td><td>${g.taxId}</td>
+      <td class="num">${fmt(g.sales)}</td><td class="num">${fmt(g.tax)}</td><td class="num">${fmt(g.total)}</td>`;
+    summaryBody.appendChild(tr);
+  });
+  document.getElementById('sumSales').textContent = fmt(gSales);
+  document.getElementById('sumTax').textContent = fmt(gTax);
+  document.getElementById('sumTotal').textContent = fmt(gTotal);
+  document.getElementById('companyCount').textContent = groupList.length + ' 家公司';
+
+  window._groupListCache = groupList;
+}
+
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  const company = document.getElementById('inCompany').value.trim();
+  const taxId = document.getElementById('inTaxId').value.trim();
+  const sales = document.getElementById('inSales').value;
+  const tax = document.getElementById('inTax').value;
+  const total = document.getElementById('inTotal').value;
+  if(!company && !taxId){ alert('請至少輸入公司名稱或統編'); return; }
+  invoices.push({company: company||'(未命名)', taxId: taxId||'', sales:Number(sales)||0, tax:Number(tax)||0, total:Number(total)||0});
+  ['inCompany','inTaxId','inSales','inTax','inTotal'].forEach(id=>document.getElementById(id).value='');
+  render();
+});
+
+document.getElementById('bulkAddBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('bulkInput').value.trim();
+  if(!text) return;
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  lines.forEach(line=>{
+    const parts = line.split(/\t|,/).map(p=>p.trim());
+    if(parts.length >= 5){
+      invoices.push({
+        company: parts[0]||'(未命名)',
+        taxId: parts[1]||'',
+        sales: Number(parts[2])||0,
+        tax: Number(parts[3])||0,
+        total: Number(parts[4])||0
+      });
+    }
+  });
+  document.getElementById('bulkInput').value='';
+  render();
+});
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(confirm('確定要清空所有發票資料嗎？')){
+    invoices = [];
+    render();
+  }
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const groupList = window._groupListCache || [];
+  let csv = '\uFEFF公司,統編,銷售額,稅額,總額\n';
+  groupList.forEach(g=>{
+    csv += `${g.company},${g.taxId},${g.sales},${g.tax},${g.total}\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = '公司發票加總.csv';
+  link.click();
+});
+
+render();
+</script>
+</body>
+</html>
